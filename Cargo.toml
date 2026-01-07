@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 rootcause = "0.11.1"
 tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread", "sync"] }
+tower = "0.5.2"

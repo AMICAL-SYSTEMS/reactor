@@ -3,6 +3,7 @@ use crate::error::ServiceError;
 pub mod actor;
 pub mod error;
 pub mod stack;
+pub mod tower;
 
 #[allow(async_fn_in_trait)]
 pub trait Service<Req: Sync + Send + 'static>: Send + Sync + 'static {
