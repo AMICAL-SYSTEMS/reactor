@@ -7,7 +7,7 @@ const DEFAULT_MSG_BUFFER_SIZE: usize = 64;
 pub struct Actor<
     Req: Sync + Send + 'static,
     Resp: Sync + Send + 'static,
-    S: Service<Req, Resp = Resp> + Sync + Send + 'static,
+    S: Service<Req = Req, Resp = Resp> + Sync + Send + 'static,
 > {
     tx: mpsc::Sender<Req>,
     rx: mpsc::Receiver<S::Resp>,
@@ -17,13 +17,16 @@ pub struct Actor<
 impl<
     Req: Send + Sync + 'static,
     Resp: Send + Sync + 'static,
-    T: Service<Req, Resp = Resp> + Send + Sync + 'static,
+    T: Service<Req = Req, Resp = Resp> + Send + Sync + 'static,
 > ActorService<Req, Resp, T> for T
 {
 }
 
-impl<Req: Sync + Send + 'static, Resp: Sync + Send + 'static, S: Service<Req, Resp = Resp>>
-    Actor<Req, Resp, S>
+impl<
+    Req: Sync + Send + 'static,
+    Resp: Sync + Send + 'static,
+    S: Service<Req = Req, Resp = Resp> + Sync + Send,
+> Actor<Req, Resp, S>
 {
     pub async fn send(&self, msg: Req) -> Result<(), ()> {
         self.tx.send(msg).await.map_err(|_| ())?;
@@ -44,8 +47,8 @@ impl<Req: Sync + Send + 'static, Resp: Sync + Send + 'static, S: Service<Req, Re
 pub trait ActorService<
     Req: Sync + Send + 'static,
     Resp: Sync + Send + 'static,
-    S: Service<Req, Resp = Resp> + Send + Sync + 'static + Sized,
->: Service<Req, Resp = Resp> + Send + Sync + 'static + Sized
+    S: Service<Req = Req, Resp = Resp> + Send + Sync + 'static + Sized,
+>: Service<Req = Req, Resp = Resp> + Send + Sync + 'static + Sized
 {
     fn into_actor(self) -> Actor<Req, Resp, S> {
         let (req_tx, mut req_rx) = mpsc::channel::<Req>(DEFAULT_MSG_BUFFER_SIZE);
@@ -75,7 +78,8 @@ mod tests {
     #[derive(Debug, Clone, Copy)]
     pub struct AddOneService;
 
-    impl Service<u64> for AddOneService {
+    impl Service for AddOneService {
+        type Req = u64;
         type Resp = u64;
 
         async fn request(&self, msg: u64) -> Result<Self::Resp, ServiceError> {
@@ -86,7 +90,8 @@ mod tests {
     #[derive(Debug, Clone, Copy)]
     pub struct DoubleService;
 
-    impl Service<u64> for DoubleService {
+    impl Service for DoubleService {
+        type Req = u64;
         type Resp = u64;
 
         async fn request(&self, msg: u64) -> Result<Self::Resp, ServiceError> {

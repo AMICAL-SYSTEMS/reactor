@@ -4,18 +4,18 @@ use rootcause::report_collection::ReportCollection;
 
 use crate::{Service, error::ServiceError};
 
-impl<Req: Send + Sync + 'static, Resp: Send + Sync + 'static, T: Service<Req, Resp = Resp>>
+impl<Req: Send + Sync + 'static, Resp: Send + Sync + 'static, T: Service<Req = Req, Resp = Resp>>
     StackService<Req, Resp> for T
 {
 }
 
 pub trait StackService<Req: Send + Sync + 'static, Resp: Send + Sync + 'static>:
-    Service<Req, Resp = Resp>
+    Service<Req = Req, Resp = Resp>
 {
     /// Insert a service to be executed first, which then executes this current service.
     fn with_before<
         AsReq: Send + Sync + 'static,
-        Bs: Service<AsReq, Resp = Req> + Sync + Send + 'static,
+        Bs: Service<Req = AsReq, Resp = Req> + Sync + Send + 'static,
     >(
         self,
         before_service: Bs,
@@ -31,7 +31,10 @@ pub trait StackService<Req: Send + Sync + 'static, Resp: Send + Sync + 'static>:
     }
 
     /// Insert a new service to be executed immediately after this current service.
-    fn then_after<AsResp, As: Service<Self::Resp, Resp = AsResp> + Sync + Send + 'static + Sized>(
+    fn then_after<
+        AsResp,
+        As: Service<Req = Self::Resp, Resp = AsResp> + Sync + Send + 'static + Sized,
+    >(
         self,
         after_service: As,
     ) -> Stack<Req, Self::Resp, Self, As>
@@ -48,8 +51,8 @@ pub trait StackService<Req: Send + Sync + 'static, Resp: Send + Sync + 'static>:
 pub struct Stack<
     BsReq: Send + Sync + 'static,
     AsReq: Send + Sync + 'static,
-    Bs: Service<BsReq, Resp = AsReq> + Send + Sync + 'static,
-    As: Service<AsReq> + Send + Sync + 'static,
+    Bs: Service<Req = BsReq, Resp = AsReq> + Send + Sync + 'static,
+    As: Service<Req = AsReq> + Send + Sync + 'static,
 > {
     pub(crate) before_service: Bs,
     pub(crate) after_service: As,
@@ -59,10 +62,11 @@ pub struct Stack<
 impl<
     BsReq: Send + Sync + 'static,
     AsReq: Send + Sync + 'static,
-    Bs: Service<BsReq, Resp = AsReq> + Send + Sync + 'static,
-    As: Service<AsReq> + Send + Sync + 'static,
-> Service<BsReq> for Stack<BsReq, AsReq, Bs, As>
+    Bs: Service<Req = BsReq, Resp = AsReq> + Send + Sync + 'static,
+    As: Service<Req = AsReq> + Send + Sync + 'static,
+> Service for Stack<BsReq, AsReq, Bs, As>
 {
+    type Req = BsReq;
     type Resp = As::Resp;
 
     async fn request(&self, msg: BsReq) -> Result<Self::Resp, ServiceError> {
@@ -96,7 +100,8 @@ mod tests {
     #[derive(Debug, Clone, Copy)]
     pub struct AddOneService;
 
-    impl Service<u64> for AddOneService {
+    impl Service for AddOneService {
+        type Req = u64;
         type Resp = u64;
 
         async fn request(&self, msg: u64) -> Result<Self::Resp, ServiceError> {
@@ -107,7 +112,8 @@ mod tests {
     #[derive(Debug, Clone, Copy)]
     pub struct DoubleService;
 
-    impl Service<u64> for DoubleService {
+    impl Service for DoubleService {
+        type Req = u64;
         type Resp = u64;
 
         async fn request(&self, msg: u64) -> Result<Self::Resp, ServiceError> {

@@ -6,13 +6,13 @@ use rootcause::markers::{Cloneable, Dynamic};
 pub use rootcause::prelude::*;
 pub type ServiceError = rootcause::Report<Dynamic, Cloneable>;
 
-impl<Req: Send + Sync + 'static, Resp: Send + Sync + 'static, T: Service<Req, Resp = Resp>>
+impl<Req: Send + Sync + 'static, Resp: Send + Sync + 'static, T: Service<Req = Req, Resp = Resp>>
     ErrorContext<Req, Resp> for T
 {
 }
 
 pub trait ErrorContext<Req: Send + Sync + 'static, Resp: Send + Sync + 'static>:
-    Service<Req, Resp = Resp>
+    Service<Req = Req, Resp = Resp>
 where
     Self: Sized,
 {
@@ -29,16 +29,20 @@ where
 pub struct ErrorContextService<
     Req: Send + Sync + 'static,
     Resp: Send + Sync + 'static,
-    S: Service<Req, Resp = Resp>,
+    S: Service<Req = Req, Resp = Resp>,
 > {
     inner: S,
     context: &'static str,
     _phantom: PhantomData<(Req, Resp)>,
 }
 
-impl<Req: Send + Sync + 'static, Resp: Send + Sync + 'static, S: Service<Req, Resp = Resp>>
-    Service<Req> for ErrorContextService<Req, Resp, S>
+impl<
+    Req: Send + Sync + 'static,
+    Resp: Send + Sync + 'static,
+    S: Service<Req = Req, Resp = Resp> + Sync,
+> Service for ErrorContextService<Req, Resp, S>
 {
+    type Req = Req;
     type Resp = Resp;
 
     async fn request(&self, msg: Req) -> Result<Self::Resp, ServiceError> {
@@ -59,7 +63,8 @@ mod tests {
     #[derive(Debug, Clone, Copy)]
     pub struct AddOneService;
 
-    impl Service<u64> for AddOneService {
+    impl Service for AddOneService {
+        type Req = u64;
         type Resp = u64;
 
         async fn request(&self, msg: u64) -> Result<Self::Resp, ServiceError> {

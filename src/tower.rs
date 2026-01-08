@@ -5,17 +5,16 @@ use rootcause::prelude::ResultExt;
 
 use crate::error::ServiceError;
 
-/// Tower compat trait
-
 impl<
     Req: Sync + Send + 'static,
     Resp: Sync + Send + 'static,
     Err: Sync + Send + 'static + core::error::Error,
     T: tower::Service<Req, Response = Resp, Error = Err> + Sync + Send + 'static,
-> crate::Service<Req> for TowerCompat<Req, Resp, T>
+> crate::Service for TowerCompat<Req, Resp, T>
 where
     <T as tower::Service<Req>>::Future: Send,
 {
+    type Req = Req;
     type Resp = Resp;
 
     async fn request(&self, msg: Req) -> Result<Self::Resp, ServiceError> {
@@ -24,6 +23,7 @@ where
     }
 }
 
+/// Tower compat trait
 pub struct TowerCompat<
     Req: Sync + Send + 'static,
     Resp: Sync + Send + 'static,
