@@ -2,8 +2,10 @@ use crate::error::ServiceError;
 
 pub mod actor;
 pub mod error;
+pub mod fsm;
 pub mod stack;
-pub mod tower;
+pub mod task;
+pub mod test;
 
 #[allow(async_fn_in_trait)]
 pub trait Service {

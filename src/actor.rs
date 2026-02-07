@@ -1,6 +1,6 @@
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::Service;
+use crate::{Service, error::ServiceError, task::TaskService};
 
 const DEFAULT_MSG_BUFFER_SIZE: usize = 64;
 
@@ -50,21 +50,27 @@ pub trait ActorService<
     S: Service<Req = Req, Resp = Resp> + Send + Sync + 'static + Sized,
 >: Service<Req = Req, Resp = Resp> + Send + Sync + 'static + Sized
 {
-    fn into_actor(self) -> Actor<Req, Resp, S> {
-        let (req_tx, mut req_rx) = mpsc::channel::<Req>(DEFAULT_MSG_BUFFER_SIZE);
-        let (resp_tx, resp_rx) = mpsc::channel::<S::Resp>(DEFAULT_MSG_BUFFER_SIZE);
+    fn into_actor(
+        self,
+    ) -> impl std::future::Future<Output = Result<Actor<Req, Resp, S>, ServiceError>> + Send {
+        async {
+            let (req_tx, mut req_rx) = mpsc::channel::<Req>(DEFAULT_MSG_BUFFER_SIZE);
+            let (resp_tx, resp_rx) = mpsc::channel::<S::Resp>(DEFAULT_MSG_BUFFER_SIZE);
 
-        let join = tokio::spawn(async move {
-            while let Some(msg) = req_rx.recv().await {
-                let resp = self.request(msg).await.unwrap();
-                resp_tx.send(resp).await.unwrap();
-            }
-        });
+            let join = TaskService::default()
+                .request(async move {
+                    while let Some(msg) = req_rx.recv().await {
+                        let resp = self.request(msg).await.unwrap();
+                        resp_tx.send(resp).await.unwrap();
+                    }
+                })
+                .await?;
 
-        Actor {
-            tx: req_tx,
-            rx: resp_rx,
-            join,
+            Ok(Actor {
+                tx: req_tx,
+                rx: resp_rx,
+                join,
+            })
         }
     }
 }
@@ -104,10 +110,17 @@ mod tests {
         let add_one_service = AddOneService;
         let double_service = DoubleService;
 
-        //let mut actor = Stack::start_actor(add_one_service.then_after(double_service));
-        let mut actor = add_one_service.then_after(double_service).into_actor();
-        actor.send(1).await.unwrap();
-        // (1 + 1) * 2
-        assert_eq!(4, actor.recv().await.unwrap());
+        {
+            //let mut actor = Stack::start_actor(add_one_service.then_after(double_service));
+            let mut actor = add_one_service
+                .then_after(double_service)
+                .into_actor()
+                .await
+                .unwrap();
+
+            actor.send(1).await.unwrap();
+            // (1 + 1) * 2
+            assert_eq!(4, actor.recv().await.unwrap());
+        }
     }
 }
